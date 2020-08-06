@@ -303,7 +303,7 @@ void renderScene(Shader& shader)
             0.25f, 2.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
             0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
         };
-        float planeVertices[]{
+        float planeVertices[] = {
             -100.0f, 0.0f, -100.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
             100.0f, 0.0f, 100.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
             -100.0f, 0.0f, 100.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
