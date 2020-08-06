@@ -15,7 +15,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xPos, double yPos);
 void scroll_callback(GLFWwindow *window, double xOffset, double yOffset);
 void processInput(GLFWwindow *window);
-void renderScene();
+void renderScene(Shader& shader);
 void renderQuad();
 
 // basic window setting
@@ -29,7 +29,7 @@ float lastFrame = 0.0f;
 // camera control
 Camera mainCamera(glm::vec3(0.0f, 0.0f, 8.0f));
 float nearPlane = 0.1f;
-float farPlane = 100.0f;
+float farPlane = 50.0f;
 float lastX = (float)SCREEN_WIDTH / 2.0f;
 float lastY = (float)SCREEN_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -39,7 +39,7 @@ const int DEPTH_MAP_WIDTH = 1024;
 const int DEPTH_MAP_HEIGHT = 1024;
 
 // light setting
-glm::vec3 lightPosition = glm::vec3(-3.0f, 3.0f, 3.0f);
+glm::vec3 lightPosition = glm::vec3(10.0f, 1.0f, 3.0f);
 glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 float lightNearPlane = 0.1f;
 float lightFarPlane = 20.0f;
@@ -80,6 +80,7 @@ int main()
     Shader averageShader("screenQuad.vert", "varianceCalculate.frag");
     Shader debugShader("screenQuad.vert", "debugShader.frag");
 
+    depthShader.use();
     depthShader.setFloat("nearPlane", lightNearPlane);
     depthShader.setFloat("farPlane", lightFarPlane);
 
@@ -91,6 +92,8 @@ int main()
     glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
     glBindRenderbuffer(GL_RENDERBUFFER, depthRBO);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, DEPTH_MAP_WIDTH, DEPTH_MAP_HEIGHT);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRBO);
+    glEnable(GL_DEPTH_TEST);
 
     unsigned int depthTexture;
     glGenTextures(1, &depthTexture);
@@ -121,7 +124,7 @@ int main()
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, varianceTexture[i], 0);
     }
 
-    glm::mat4 lightView = glm::lookAt(lightPosition, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 lightView = glm::lookAt(lightPosition, glm::vec3(6.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 lightProjection = glm::perspective(glm::radians(60.0f), (float)DEPTH_MAP_WIDTH / (float)DEPTH_MAP_HEIGHT, lightNearPlane, lightFarPlane);
 
     // static parameter of shader
@@ -144,23 +147,22 @@ int main()
         // shadow pass
         glViewport(0, 0, DEPTH_MAP_WIDTH, DEPTH_MAP_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         depthShader.use();
-        depthShader.setMat4("view", view);
-        depthShader.setMat4("projection", projection);
-        renderScene();
+        depthShader.setMat4("view", lightView);
+        depthShader.setMat4("projection", lightProjection);
+        renderScene(depthShader);
 
         // debug
         glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         debugShader.use();
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE0, depthTexture);
+        glBindTexture(GL_TEXTURE_2D, depthTexture);
         renderQuad();
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -228,26 +230,11 @@ void renderQuad()
     if (quadVAO == 0)
     {
         float quadVertices[] = {
-            -1.0f,
-            1.0f,
-            0.0f,
-            0.0f,
-            1.0f,
-            -1.0f,
-            -1.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-            1.0f,
-            1.0f,
-            0.0f,
-            1.0f,
-            1.0f,
-            1.0f,
-            -1.0f,
-            0.0f,
-            1.0f,
-            0.0f,
+            // position        // uv
+            -1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+            1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
         };
         glGenVertexArrays(1, &quadVAO);
         glGenBuffers(1, &quadVBO);
@@ -266,10 +253,97 @@ void renderQuad()
 
 unsigned int frameVAO = 0;
 unsigned int frameVBO;
-void renderScene()
+unsigned int planeVAO = 0;
+unsigned int planeVBO;
+void renderScene(Shader& shader)
 {
     if (frameVAO == 0)
     {
-        
+        float frameVertices[] = {
+            // position         // uv       // normal
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+            0.0f, 0.0f, 0.25f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+            0.25f, 0.0f, 0.25f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+            0.25f, 0.0f, 0.25f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+            0.25f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+            0.0f, 2.0f, 0.0f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+            0.0f, 2.0f, 0.25f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+            0.0f, 2.0f, 0.25f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.25f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+            0.25f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+            0.25f, 2.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+            0.25f, 2.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+            0.0f, 2.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+
+            0.0f, 0.0f, 0.25f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+            0.25f, 0.0f, 0.25f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            0.25f, 2.0f, 0.25f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            0.25f, 2.0f, 0.25f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            0.0f, 2.0f, 0.25f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 0.25f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+
+            0.25f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            0.25f, 2.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+            0.25f, 2.0f, 0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+            0.25f, 2.0f, 0.25f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+            0.25f, 0.0f, 0.25f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            0.25f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+
+            0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 2.0f, 0.25f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            0.25f, 2.0f, 0.25f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            0.25f, 2.0f, 0.25f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            0.25f, 2.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+        };
+        float planeVertices[]{
+            -100.0f, 0.0f, -100.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            100.0f, 0.0f, 100.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            -100.0f, 0.0f, 100.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            -100.0f, 0.0f, -100.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            100.0f, 0.0f, -100.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            100.0f, 0.0f, 100.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            
+        };
+        glGenVertexArrays(1, &frameVAO);
+        glGenBuffers(1, &frameVBO);
+        glBindVertexArray(frameVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, frameVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(frameVertices), &frameVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(3*sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(5*sizeof(float)));
+
+        glGenVertexArrays(1, &planeVAO);
+        glGenBuffers(1, &planeVBO);
+        glBindVertexArray(planeVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), &planeVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(3*sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(5*sizeof(float)));
     }
+    glBindVertexArray(frameVAO);
+    glm::mat4 model = glm::mat4(1.0);
+    for (int i=0; i<5; i++){
+        shader.setMat4("model", model);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        model = glm::translate(model, glm::vec3(2.0, 0.0, 0.0));
+    }
+    glBindVertexArray(planeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
 }
