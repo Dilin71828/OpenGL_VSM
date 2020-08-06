@@ -131,6 +131,9 @@ int main()
     debugShader.use();
     debugShader.setInt("debugTexture", 0);
 
+    averageShader.use();
+    averageShader.setInt("depthTexture", 0);
+
     while (!glfwWindowShouldClose(window))
     {
         // calculate the passed time from last frame
@@ -154,6 +157,24 @@ int main()
         depthShader.setMat4("projection", lightProjection);
         renderScene(depthShader);
 
+        // calculate the average value
+        glBindFramebuffer(GL_FRAMEBUFFER, varianceFBO[0]);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        averageShader.use();
+        averageShader.setBool("horizontal", true);
+        renderQuad();
+        glBindFramebuffer(GL_FRAMEBUFFER, varianceFBO[1]);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, varianceTexture[0]);
+        averageShader.setBool("horizontal", false);
+        renderQuad();
+
+        // render from camera view
+
         // debug
         glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -161,7 +182,7 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         debugShader.use();
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        glBindTexture(GL_TEXTURE_2D, varianceTexture[1]);
         renderQuad();
 
         glfwSwapBuffers(window);
