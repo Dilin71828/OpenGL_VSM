@@ -12,6 +12,6 @@ float linearizeDepth(float depth){
 void main()
 {
     float depth = linearizeDepth(gl_FragCoord.z);
-    FragColor.x = depth;
-    FragColor.y = depth*depth;
+    FragColor.x = (depth - nearPlane)/(farPlane-nearPlane);
+    FragColor.y = FragColor.x*FragColor.x;
 }

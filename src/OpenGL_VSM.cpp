@@ -28,6 +28,8 @@ float lastFrame = 0.0f;
 
 // camera control
 Camera mainCamera(glm::vec3(0.0f, 0.0f, 8.0f));
+float nearPlane = 0.1f;
+float farPlane = 100.0f;
 float lastX = (float)SCREEN_WIDTH / 2.0f;
 float lastY = (float)SCREEN_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -35,6 +37,12 @@ bool firstMouse = true;
 // render setting
 const int DEPTH_MAP_WIDTH = 1024;
 const int DEPTH_MAP_HEIGHT = 1024;
+
+// light setting
+glm::vec3 lightPosition = glm::vec3(-3.0f, 3.0f, 3.0f);
+glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+float lightNearPlane = 0.1f;
+float lightFarPlane = 20.0f;
 
 int main()
 {
@@ -68,6 +76,13 @@ int main()
 
     glEnable(GL_DEPTH_TEST);
 
+    Shader depthShader("depthShader.vert", "depthShader.frag");
+    Shader averageShader("screenQuad.vert", "varianceCalculate.frag");
+    Shader debugShader("screenQuad.vert", "debugShader.frag");
+
+    depthShader.setFloat("nearPlane", lightNearPlane);
+    depthShader.setFloat("farPlane", lightFarPlane);
+
     // frame buffer for the first pass, view from the light and get the depth and squared depth
     unsigned int depthFBO;
     unsigned int depthRBO;
@@ -87,6 +102,31 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, depthTexture, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    unsigned int varianceFBO[2];
+    unsigned int varianceTexture[2];
+    glGenFramebuffers(2, varianceFBO);
+    glGenTextures(2, varianceTexture);
+
+    for (int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, varianceFBO[i]);
+        glBindTexture(GL_TEXTURE_2D, varianceTexture[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, DEPTH_MAP_WIDTH, DEPTH_MAP_HEIGHT, 0, GL_RG, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, varianceTexture[i], 0);
+    }
+
+    glm::mat4 lightView = glm::lookAt(lightPosition, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 lightProjection = glm::perspective(glm::radians(60.0f), (float)DEPTH_MAP_WIDTH / (float)DEPTH_MAP_HEIGHT, lightNearPlane, lightFarPlane);
+
+    // static parameter of shader
+    debugShader.use();
+    debugShader.setInt("debugTexture", 0);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -97,7 +137,29 @@ int main()
 
         processInput(window);
 
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        // get camera parameters
+        glm::mat4 view = mainCamera.GetViewMatrix();
+        glm::mat4 projection = glm::perspective(glm::radians(mainCamera.Zoom), (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT, nearPlane, farPlane);
+
+        // shadow pass
+        glViewport(0, 0, DEPTH_MAP_WIDTH, DEPTH_MAP_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthFBO);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        depthShader.use();
+        depthShader.setMat4("view", view);
+        depthShader.setMat4("projection", projection);
+        renderScene();
+
+        // debug
+        glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        debugShader.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE0, depthTexture);
+        renderQuad();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glfwSwapBuffers(window);
@@ -166,10 +228,26 @@ void renderQuad()
     if (quadVAO == 0)
     {
         float quadVertices[] = {
-            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-             1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
-             1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+            -1.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            -1.0f,
+            -1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            1.0f,
+            0.0f,
+            1.0f,
+            1.0f,
+            1.0f,
+            -1.0f,
+            0.0f,
+            1.0f,
+            0.0f,
         };
         glGenVertexArrays(1, &quadVAO);
         glGenBuffers(1, &quadVBO);
@@ -177,11 +255,21 @@ void renderQuad()
         glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
         glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void*)(3*sizeof(float)));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
     }
     glBindVertexArray(quadVAO);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
+}
+
+unsigned int frameVAO = 0;
+unsigned int frameVBO;
+void renderScene()
+{
+    if (frameVAO == 0)
+    {
+        
+    }
 }
