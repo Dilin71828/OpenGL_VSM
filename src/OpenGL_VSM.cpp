@@ -27,7 +27,7 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
 // camera control
-Camera mainCamera(glm::vec3(0.0f, 0.0f, 8.0f));
+Camera mainCamera(glm::vec3(0.0f, 2.0f, 8.0f));
 float nearPlane = 0.1f;
 float farPlane = 50.0f;
 float lastX = (float)SCREEN_WIDTH / 2.0f;
@@ -39,7 +39,7 @@ const int DEPTH_MAP_WIDTH = 1024;
 const int DEPTH_MAP_HEIGHT = 1024;
 
 // light setting
-glm::vec3 lightPosition = glm::vec3(10.0f, 1.0f, 3.0f);
+glm::vec3 lightPosition = glm::vec3(8.0f, 4.0f, 5.0f);
 glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 float lightNearPlane = 0.1f;
 float lightFarPlane = 20.0f;
@@ -78,11 +78,8 @@ int main()
 
     Shader depthShader("depthShader.vert", "depthShader.frag");
     Shader averageShader("screenQuad.vert", "varianceCalculate.frag");
+    Shader mainShader("mainShader.vert", "mainShader.frag");
     Shader debugShader("screenQuad.vert", "debugShader.frag");
-
-    depthShader.use();
-    depthShader.setFloat("nearPlane", lightNearPlane);
-    depthShader.setFloat("farPlane", lightFarPlane);
 
     // frame buffer for the first pass, view from the light and get the depth and squared depth
     unsigned int depthFBO;
@@ -112,22 +109,41 @@ int main()
     glGenFramebuffers(2, varianceFBO);
     glGenTextures(2, varianceTexture);
 
+    GLfloat borderColor[] = {1.0, 1.0, 1.0, 1.0};
     for (int i = 0; i < 2; i++)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, varianceFBO[i]);
         glBindTexture(GL_TEXTURE_2D, varianceTexture[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, DEPTH_MAP_WIDTH, DEPTH_MAP_HEIGHT, 0, GL_RG, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, varianceTexture[i], 0);
     }
 
     glm::mat4 lightView = glm::lookAt(lightPosition, glm::vec3(6.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 lightProjection = glm::perspective(glm::radians(60.0f), (float)DEPTH_MAP_WIDTH / (float)DEPTH_MAP_HEIGHT, lightNearPlane, lightFarPlane);
+    glm::mat4 lightProjection = glm::perspective(glm::radians(90.0f), (float)DEPTH_MAP_WIDTH / (float)DEPTH_MAP_HEIGHT, lightNearPlane, lightFarPlane);
 
     // static parameter of shader
+    depthShader.use();
+    depthShader.setFloat("nearPlane", lightNearPlane);
+    depthShader.setFloat("farPlane", lightFarPlane);
+    mainShader.setInt("varianceShadowMap", 0);
+
+    mainShader.use();
+    mainShader.setFloat("nearPlane", lightNearPlane);
+    mainShader.setFloat("farPlane", lightFarPlane);
+    mainShader.setInt("varianceShadowMap", 0);
+    mainShader.setMat4("worldToLight", lightProjection*lightView);
+    mainShader.setVec3("mainLight.position", lightPosition);
+    mainShader.setVec3("mainLight.intensity", glm::vec3(3,3,3));
+    mainShader.setFloat("mainLight.constant", 1.0);
+    mainShader.setFloat("mainLight.linear", 0.05);
+    mainShader.setFloat("mainLight.quadratic", 0.002);
+    mainShader.setVec3("material.albedo", glm::vec3(0.6, 0.6, 0.6));
+
     debugShader.use();
     debugShader.setInt("debugTexture", 0);
 
@@ -174,16 +190,26 @@ int main()
         renderQuad();
 
         // render from camera view
+        glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, varianceTexture[1]);
+        mainShader.use();
+        mainShader.setMat4("view", view);
+        mainShader.setMat4("projection", projection);
+        mainShader.setVec3("cameraPosition", mainCamera.Position);
+        renderScene(mainShader);
 
         // debug
-        glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        /*glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         debugShader.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, varianceTexture[1]);
-        renderQuad();
+        renderQuad();*/
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -365,6 +391,9 @@ void renderScene(Shader& shader)
         model = glm::translate(model, glm::vec3(2.0, 0.0, 0.0));
     }
     glBindVertexArray(planeVAO);
+    model = glm::mat4(1.0);
+    model = glm::translate(model, glm::vec3(0.0, 0.001, 0.0));
+    shader.setMat4("model", model);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 }
