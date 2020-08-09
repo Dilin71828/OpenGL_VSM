@@ -92,6 +92,8 @@ int main()
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRBO);
     glEnable(GL_DEPTH_TEST);
 
+    GLfloat borderColor[] = {1.0, 1.0, 1.0, 1.0};
+
     unsigned int depthTexture;
     glGenTextures(1, &depthTexture);
     glBindTexture(GL_TEXTURE_2D, depthTexture);
@@ -108,20 +110,21 @@ int main()
     unsigned int varianceTexture[2];
     glGenFramebuffers(2, varianceFBO);
     glGenTextures(2, varianceTexture);
-
-    GLfloat borderColor[] = {1.0, 1.0, 1.0, 1.0};
+    
     for (int i = 0; i < 2; i++)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, varianceFBO[i]);
         glBindTexture(GL_TEXTURE_2D, varianceTexture[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, DEPTH_MAP_WIDTH, DEPTH_MAP_HEIGHT, 0, GL_RG, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, varianceTexture[i], 0);
     }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
     glm::mat4 lightView = glm::lookAt(lightPosition, glm::vec3(6.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 lightProjection = glm::perspective(glm::radians(90.0f), (float)DEPTH_MAP_WIDTH / (float)DEPTH_MAP_HEIGHT, lightNearPlane, lightFarPlane);
@@ -140,8 +143,8 @@ int main()
     mainShader.setVec3("mainLight.position", lightPosition);
     mainShader.setVec3("mainLight.intensity", glm::vec3(3,3,3));
     mainShader.setFloat("mainLight.constant", 1.0);
-    mainShader.setFloat("mainLight.linear", 0.05);
-    mainShader.setFloat("mainLight.quadratic", 0.002);
+    mainShader.setFloat("mainLight.linear", 0.1);
+    mainShader.setFloat("mainLight.quadratic", 0.005);
     mainShader.setVec3("material.albedo", glm::vec3(0.6, 0.6, 0.6));
 
     debugShader.use();

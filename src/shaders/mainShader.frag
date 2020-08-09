@@ -30,7 +30,7 @@ uniform sampler2D varianceShadowMap;
 float calculateShadow(float depth, vec2 uv){
     vec2 varianceData = texture(varianceShadowMap, uv).rg;
     float var = varianceData.g - varianceData.r*varianceData.r;
-    if(depth <= varianceData.r){
+    if(depth - 0.001 <= varianceData.r){
         return 1.0;
     }
     else{
@@ -63,6 +63,7 @@ void main()
     vec4 lightSpacePosition = worldToLight * vec4(WorldPosition, 1.0);
     lightSpacePosition.xyz=lightSpacePosition.xyz/lightSpacePosition.w;
     float depth = linearizeDepth(lightSpacePosition.z);
+    depth = clamp(depth, 0.0, 1.0);
     lightSpacePosition = lightSpacePosition*0.5 + 0.5;
     float shadow = calculateShadow(depth, lightSpacePosition.xy);
     //FragColor = vec4(vec3(shadow), 1.0);
@@ -71,4 +72,5 @@ void main()
     vec3 color = ambient + diffuse;
     color = pow(color, vec3(1/2.2));
     FragColor = vec4(color, 1.0);
+    //FragColor = vec4(texture(varianceShadowMap, lightSpacePosition.xy).rg, 0.0, 1.0);
 }
