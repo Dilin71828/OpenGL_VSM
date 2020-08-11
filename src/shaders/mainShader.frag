@@ -18,6 +18,7 @@ struct Material{
     vec3 albedo;
     float metallic;
     float roughness;
+    float spec;
 };
 uniform Material material;
 
@@ -60,6 +61,10 @@ void main()
     //FragColor = vec4(vec3(NdotL), 1.0);
     //FragColor = vec4(diffuse, 1.0);
 
+    vec3 H = normalize(lightDirection + viewDirection);
+    float NdotH = max(dot(Normal, H), 0.0);
+    vec3 specular = pow(NdotH, material.spec)*mainLight.intensity*attenuation;
+
     vec4 lightSpacePosition = worldToLight * vec4(WorldPosition, 1.0);
     lightSpacePosition.xyz=lightSpacePosition.xyz/lightSpacePosition.w;
     float depth = linearizeDepth(lightSpacePosition.z);
@@ -68,8 +73,9 @@ void main()
     float shadow = calculateShadow(depth, lightSpacePosition.xy);
     //FragColor = vec4(vec3(shadow), 1.0);
     diffuse *= shadow;
+    specular *= shadow;
 
-    vec3 color = ambient + diffuse;
+    vec3 color = ambient + diffuse + specular;
     color = pow(color, vec3(1/2.2));
     FragColor = vec4(color, 1.0);
     //FragColor = vec4(texture(varianceShadowMap, lightSpacePosition.xy).rg, 0.0, 1.0);

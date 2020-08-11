@@ -141,9 +141,9 @@ int main()
     mainShader.setInt("varianceShadowMap", 0);
     mainShader.setMat4("worldToLight", lightProjection*lightView);
     mainShader.setVec3("mainLight.position", lightPosition);
-    mainShader.setVec3("mainLight.intensity", glm::vec3(3,3,3));
+    mainShader.setVec3("mainLight.intensity", glm::vec3(2,2,2));
     mainShader.setFloat("mainLight.constant", 1.0);
-    mainShader.setFloat("mainLight.linear", 0.1);
+    mainShader.setFloat("mainLight.linear", 0.2);
     mainShader.setFloat("mainLight.quadratic", 0.005);
     mainShader.setVec3("material.albedo", glm::vec3(0.6, 0.6, 0.6));
 
@@ -387,12 +387,14 @@ void renderScene(Shader& shader)
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8*sizeof(float), (void*)(5*sizeof(float)));
     }
     glBindVertexArray(frameVAO);
+    shader.setFloat("material.spec", 64.0);
     glm::mat4 model = glm::mat4(1.0);
     for (int i=0; i<5; i++){
         shader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 36);
         model = glm::translate(model, glm::vec3(2.0, 0.0, 0.0));
     }
+    shader.setFloat("material.spec", 12.0);
     glBindVertexArray(planeVAO);
     model = glm::mat4(1.0);
     model = glm::translate(model, glm::vec3(0.0, 0.001, 0.0));
